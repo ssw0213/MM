@@ -1,4 +1,7 @@
 #!/bin/bash
+# script to start the mumps claim cleaner routine
+#  -v | --version : print version number and quit
 cd ~/cleaning/
-mumps -run "^ZSSWCLMS"
+mumps -run "START^ZSSWCLMS" $1
+
 

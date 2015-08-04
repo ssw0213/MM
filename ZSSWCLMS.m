@@ -1,36 +1,55 @@
-SWCLM4   ; Routine to remove REV*G5 and REV*G2 entries from EDI files
+ZSSWCLM   ; Routine to remove REV*G5 and REV*G2 entries from EDI files
                 ; SSW 3150527
            ;Place all files to be cleaned in directory ~/cleaning, 
            ; FN is path to input file. Output goes to "FN.clean"
-INIT    N X,Z,EOFT,P,PWD,TMPZ,DT,D,DASHLINE,B,S,E,I,J,K,NREV,NF,IN,SEGS,KEY,G2,G5,MC0,SF,FNO,LIN,LS,LO,CRLF,CDIR,CLOG   ; New variables.
-        S NREV=4  ; Revision number of this routine
+	Q
+START	N NREV S NREV="v1.1"  ; Revision number of this routine
+	N V S V=$ZCMDLINE
+	I $L(V) D
+	. ; If this is a version request, print version and quit.
+	.I $G(V)?1(1"-v",1"--version") W "ZSSWCLMS "_NREV,! Q  
+	.E  I $D(V) W "???",! Q
+	D INIT
+	Q
+INIT    ; Initialize things
+	N B,D,E,I,J,K,P,S,X,Z,DT,G2,G5,IN,LS,LO,NF,SF   ; New variables.
+	N FNO,KEY,LIN,MC0,PWD,CDIR,CLOG,CRLF,EOFT,SEGS,TMPZ,DASHLINE   ; New variables.
         S G2="REF*G2*",G5="REF*G5*",D=$C(126)  ; $C(126)="~"
-        ; set up a temp file for filenames, a date string, a logfile path, and  a line string
-	S DT=$ZDATE($H,"YYYYMMDD")
-	S FP="FilePipe"
-	O FP:(command="pwd":readonly)::"PIPE" U FP R PWD C FP
-	S CDIR=PWD_"/claims."_DT,CLOG=CDIR_"/out/log"_NREV_"."_DT,$P(DASHLINE,"-",40)=""
+        ; set up a date string, a line string, and a name for the file pipe
+	S DT=$ZDATE($H,"YYYYMMDD"),$P(DASHLINE,"-",40)="",FP="FilePipe"
+	; Open a PIPE, get pwd, the path to working directory, close the pipe.
+	O FP:(command="pwd":readonly)::"PIPE" U FP R PWD C FP 
+	;  Name CDIR, a directory  for today's files, and CLOG, a logfile
+	S CDIR=PWD_"/claims."_DT,CLOG=CDIR_"/out/log-"_NREV_"."_DT
         ; Use linux system calls to make a dated claims directory with in and out subdirectories
         ZSY "mkdir -p "_CDIR_"/in "_CDIR_"/out"  
-GETF   	O FP:(command="find /home/opus/share/ -maxdepth 1 -type f":readonly)::"PIPE"
-	F I=1:1 U FP R X Q:$ZEOF  S FN(I)=$TR(X," ","_") S:X["clean" I=I-1 ; Read filenames, no spaces, skip if clean already	
-	C FP S NF=I-1 O CLOG ; Close FilePipe, Save Number of Files, Open Log
-	F I=1:1:NF D  ; Go through and clean each file
+GETF	; Open FP again to find the filenames to be cleaned in share/, ignoring any directories.
+	O FP:(command="find /home/opus/share/ -maxdepth 1 -type f":readonly)::"PIPE" 
+	; Read filenames, change spaces to underscores, skip file if clean already	
+	F I=1:1 U FP R X Q:$ZEOF  S FN(I,1)=X,FN(I)=$TR(X," ","_") S:X["clean" I=I-1 
+	; Save NF, number of files. Close the pipe and open the CLOG file for logging
+	S NF=I-1 C FP O CLOG 
+	; Loop through and clean each file
+	F I=1:1:NF D  
 	.S FN=$P(FN(I),"/",$L(FN(I),"/")) ; Save FileName without path
-	.S FNO=CDIR_"/out/"_FN_".clean"_NREV  ; Name of output file
-        .S SEGO=PWD_"/segfiles/"_$P(FN(I),"/",$L(FN(I),"/"))  ; Name of a segmented file in segfile directory
-        .U CLOG W !,I,?4,FN(I)," > ",!,?4,FNO U 0 W !,I,?4,FN(I) D CLEAN   ; Write the filename to Log and 0, then clean it
-	.ZSY "cp "_FN(I)_" "_CDIR_"/in"  ; copy the input file to "in" 
+	.S FNO=CDIR_"/out/"_FN_".clean"  ; FNO = path of output file
+	.S FNI=CDIR_"/in/"_FN  ; FNI = path of input file
+        .S SEGO=PWD_"/segfiles/"_FN  ; SEGO = a segmented file in ~/cleaning/segfiles
+	. ; Write filename to Log and print to screen , then go clean the file
+        .U CLOG W !,I,?4,FN(I)," > ",!,?4,FNO U 0 W !,I,?4,FN(I) D CLEAN   
+	.; Now that the file is clean, move the original to "in", using spaceless name
+	.ZSY "mv "_FN(I,1)_" "_CDIR_"/in/"_FN  
         C CLOG U 0 W !,"Processed ",NF," files",!  ; print to screen when done
         Q       ; all done
-CLEAN ; Clean file named FN(I)
-        S MC0=$S($TR(FN(I),"MEDICAR","medicar")["medicar":"99212*0*",1:"notMedicare") ; MC0 search variable
+CLEAN   ; Clean file named FN(I,1)
+        S MC0=$S($TR(FN(I,1),"MEDICAR","medicar")["medicar":"99212*0*",1:"notMedicare") ; MC0 search variable
         ; Translate upper case "MEDICARE" to lower case and check to see if filename contains either one.
-        ; If so,  set up to search for 99212*0*, otherwise "notMedicare" which will not be found
-        O FN(I):(readonly:fixed:recordsize=32767)  ; set up for binary read
-        U FN(I) S IN="" F J=1:1 R X Q:X=""  S IN=IN_X  ; Read input file into local variable IN
+        ; If so, set up to search for 99212*0*, otherwise "notMedicare" which will not be found
+        O FN(I):(readonly:fixed:recordsize=32767)  ; set up for binary read, 32K chunks, not line-oriented
+        U FN(I) S IN="" F J=1:1 R X Q:X=""  S IN=IN_X  ; Read input file into local variable IN, one chunk
         C FN(I)  ; Close input file
-        S LIN=$L(IN),IN=$TR(IN,$C(10)_$C(13)),CRLF=LIN-$L(IN)  ; strip linefeeds and carriage returns
+        S LIN=$L(IN),IN=$TR(IN,$C(10)_$C(13)),CRLF=LIN-$L(IN)  ; strip all linefeeds and carriage returns
+	;See if it is a Central Labs file. If so, strip CRLF's and quit.
 	I IN["NM1*41*2*CENTRAL" S LS=0 U CLOG W !,"CENTRAL LABS File: Strip CRLF only" G FINISH
         S X(0)="" O SEGO U SEGO ; open segmented file, get ready to write initial ""
         F J=1:1 W X(J-1),! Q:$P(IN,D,J)?." "  S X(J)=$P(IN,D,J)_D ; Chunk into segments in X(J) array
