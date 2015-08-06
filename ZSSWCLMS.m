@@ -1,7 +1,8 @@
 ZSSWCLM   ; Routine to remove REV*G5 and REV*G2 entries from EDI files
                 ; SSW 3150527
-           ;Place all files to be cleaned in directory ~/cleaning, 
-           ; FN is path to input file. Output goes to "FN.clean"
+          ; Place all files to be cleaned in directory /home/opus/share/
+          ; FP() is path to input file. Output goes to 
+	  ; Output will be found in ~/cleaning/claims.<date>/out/FN.clean
 	Q
 START	N NREV S NREV="v1.1"  ; Revision number of this routine
 	N V S V=$ZCMDLINE
@@ -13,7 +14,7 @@ START	N NREV S NREV="v1.1"  ; Revision number of this routine
 	Q
 INIT    ; Initialize things
 	N B,D,E,I,J,K,P,S,X,Z,DT,G2,G5,IN,LS,LO,NF,SF   ; New variables.
-	N FNO,KEY,LIN,MC0,PWD,CDIR,CLOG,CRLF,EOFT,SEGS,TMPZ,DASHLINE   ; New variables.
+	N FPO,KEY,LIN,MC0,PWD,CDIR,CLOG,CRLF,EOFT,SEGS,TMPZ,DASHLINE   ; New variables.
         S G2="REF*G2*",G5="REF*G5*",D=$C(126)  ; $C(126)="~"
         ; set up a date string, a line string, and a name for the file pipe
 	S DT=$ZDATE($H,"YYYYMMDD"),$P(DASHLINE,"-",40)="",FP="FilePipe"
@@ -25,29 +26,28 @@ INIT    ; Initialize things
         ZSY "mkdir -p "_CDIR_"/in "_CDIR_"/out"  
 GETF	; Open FP again to find the filenames to be cleaned in share/, ignoring any directories.
 	O FP:(command="find /home/opus/share/ -maxdepth 1 -type f":readonly)::"PIPE" 
-	; Read filenames, change spaces to underscores, skip file if clean already	
-	F I=1:1 U FP R X Q:$ZEOF  S FN(I,1)=X,FN(I)=$TR(X," ","_") S:X["clean" I=I-1 
+	; Read filepath, change spaces to underscores, skip file if clean already	
+	F I=1:1 U FP R X Q:$ZEOF  S FP(I,1)=X,FP(I)=$TR(X," ","_") S:X["clean" I=I-1 
 	; Save NF, number of files. Close the pipe and open the CLOG file for logging
 	S NF=I-1 C FP O CLOG 
 	; Loop through and clean each file
 	F I=1:1:NF D  
-	.S FN=$P(FN(I),"/",$L(FN(I),"/")) ; Save FileName without path
-	.S FNO=CDIR_"/out/"_FN_".clean"  ; FNO = path of output file
-	.S FNI=CDIR_"/in/"_FN  ; FNI = path of input file
+	.S FN=$P(FP(I),"/",$L(FP(I),"/")) ; Save FileName without path
+	.S FPO=CDIR_"/out/"_FN_".clean"  ; FPO = path of output file
         .S SEGO=PWD_"/segfiles/"_FN  ; SEGO = a segmented file in ~/cleaning/segfiles
 	. ; Write filename to Log and print to screen , then go clean the file
-        .U CLOG W !,I,?4,FN(I)," > ",!,?4,FNO U 0 W !,I,?4,FN(I) D CLEAN   
+        .U CLOG W !,I,?4,FP(I)," > ",!,?4,FPO U 0 W !,I,?4,FP(I) D CLEAN   
 	.; Now that the file is clean, move the original to "in", using spaceless name
-	.ZSY "mv "_FN(I,1)_" "_CDIR_"/in/"_FN  
+	.ZSY "mv "_FP(I,1)_" "_CDIR_"/in/"_FN  
         C CLOG U 0 W !,"Processed ",NF," files",!  ; print to screen when done
         Q       ; all done
-CLEAN   ; Clean file named FN(I,1)
-        S MC0=$S($TR(FN(I,1),"MEDICAR","medicar")["medicar":"99212*0*",1:"notMedicare") ; MC0 search variable
+CLEAN   ; Clean file name from filepath FP(I,1)
+        S MC0=$S($TR(FP(I,1),"MEDICAR","medicar")["medicar":"99212*0*",1:"notMedicare") ; MC0 search variable
         ; Translate upper case "MEDICARE" to lower case and check to see if filename contains either one.
         ; If so, set up to search for 99212*0*, otherwise "notMedicare" which will not be found
-        O FN(I):(readonly:fixed:recordsize=32767)  ; set up for binary read, 32K chunks, not line-oriented
-        U FN(I) S IN="" F J=1:1 R X Q:X=""  S IN=IN_X  ; Read input file into local variable IN, one chunk
-        C FN(I)  ; Close input file
+        O FP(I):(readonly:fixed:recordsize=32767)  ; set up for binary read, 32K chunks, not line-oriented
+        U FP(I) S IN="" F J=1:1 R X Q:X=""  S IN=IN_X  ; Read chunks into one big chunk in local variable IN
+        C FP(I)  ; Close input file
         S LIN=$L(IN),IN=$TR(IN,$C(10)_$C(13)),CRLF=LIN-$L(IN)  ; strip all linefeeds and carriage returns
 	;See if it is a Central Labs file. If so, strip CRLF's and quit.
 	I IN["NM1*41*2*CENTRAL" S LS=0 U CLOG W !,"CENTRAL LABS File: Strip CRLF only" G FINISH
@@ -68,10 +68,10 @@ CLEAN   ; Clean file named FN(I,1)
         .I X(J)="" S SF=1,LS=LS+$L(S) W !,J-(X(J-1)=""),?5,S,?75,$L(S); Write what you did
         W:SF=0 !," no search strings found"  ; not found
         S IN="" F K=1:1:SEGS S IN=IN_X(K)    ; Write revised segments to file, save in IN
-FINISH  O FNO:(newversion:stream:nowrap:chset="M") ; change to no-line EDI file
-        U FNO W IN C FNO ; binary write
+FINISH  O FPO:(newversion:stream:nowrap:chset="M") ; change to no-line EDI file
+        U FPO W IN C FPO ; binary write
         U CLOG W !,"Stripped ",CRLF," CR and LF characters, excised ",LS," string characters."
         W !,"Input file length = ",LIN,", output file length = ",$L(IN),!,DASHLINE,!
-        ZSY "cp "_FNO_" /home/opus/share" 
+        ZSY "cp "_FPO_" /home/opus/share" 
         Q
 
