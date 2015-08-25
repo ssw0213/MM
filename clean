@@ -1,13 +1,4 @@
 #!/bin/bash
-cd /home/opus/share/
-find . -maxdepth 1 -type f -name '* *' | while read file;
-do
-target=`echo "$file" | sed 's/ /_/g'`;
-mv "$file" "$target";
-done;
-ls
-find . -maxdepth 1 -type f -exec cp '{}' ~/cleaning/ \;
 cd ~/cleaning/
 mumps -run "^ZSSWCLMS"
-
 
