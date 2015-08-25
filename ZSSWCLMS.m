@@ -57,8 +57,8 @@ CLEAN   ; Clean file name from filepath FP(I,1)
         U FP(I) S IN="" F J=1:1 R X Q:X=""  S IN=IN_X  ; Read chunks into one big chunk in local variable IN
         C FP(I)  ; Close input file
         S LIN=$L(IN),IN=$TR(IN,$C(10)_$C(13)),CRLF=LIN-$L(IN)  ; strip all linefeeds and carriage returns
-	;See if it is a Central Labs file. If so, strip CRLF's and quit.
-	I IN["NM1*41*2*CENTRAL" S LS=0 U CLOG W !,"CENTRAL LABS File: Strip CRLF only" G FINISH
+	;See if it is a Central Labs file. If so, strip CRLF's and quit.; Deprecated:clean Central too
+	;I IN["NM1*41*2*CENTRAL" S LS=0 U CLOG W !,"CENTRAL LABS File: Strip CRLF only" G FINISH
         S X(0)="" O SEGO U SEGO ; open segmented file, get ready to write initial ""
         F J=1:1 W X(J-1),! Q:$P(IN,D,J)?." "  S X(J)=$P(IN,D,J)_D ; Chunk into segments in X(J) array
         S SEGS=J-1 ;  Save number of segments. Note- omit last Seg if it is all spaces
@@ -111,5 +111,6 @@ FINISH  O FPO:(newversion:stream:nowrap:chset="M") ; change to no-line EDI file
         W !,"Input file length = ",LIN,", output file length = ",$L(IN),!,DASHLINE,!
         ZSY "cp "_FPO_" /home/opus/share" 
         Q
+
 
 

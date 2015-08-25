@@ -14,8 +14,9 @@ Putting VistA in West Virginia
   It accepts one option:  -v or --version, prints version and quits.
 
   Be sure GT.M mumps is installed, and place the ZSSWCLMS.m routine
-  in its PATH - on DEV it is:
+  in its PATH - on DEV that is:
     echo $gtmroutines
+  Then, assuming the p directory is in the PATH:
     mv ZSSWCLMS.m ~/p
 
   To run it, place all your EDI files in a directory at
